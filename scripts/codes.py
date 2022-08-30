@@ -32,7 +32,7 @@ def calc_out_weights(players):
     players.loc[players['out_weight'] <0, 'out_weight'] =0
     return players.sample(1, weights=players.out_weight)
 
-def calc_in_players_weights(players):
+def calc_in_weights(players):
     players['in_weight'] = 1
     players['in_weight'] += players['diff']/3
     players['in_weight'] += players['form'].astype("float")*10
