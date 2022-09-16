@@ -1,0 +1,123 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: regression-ml-workflow-pipeline-
+  annotations: {pipelines.kubeflow.org/kfp_sdk_version: 1.8.13, pipelines.kubeflow.org/pipeline_compilation_time: '2022-09-16T12:35:00.047217',
+    pipelines.kubeflow.org/pipeline_spec: '{"description": "A pipeline for a regressor
+      job for predicting the total points in FPL", "name": "REGRESSION ML workflow
+      pipeline"}'}
+  labels: {pipelines.kubeflow.org/kfp_sdk_version: 1.8.13}
+spec:
+  entrypoint: regression-ml-workflow-pipeline
+  templates:
+  - name: data-encoding
+    container:
+      args: [--train, /tmp/inputs/input-0/data]
+      command: [python, data_encoding.py]
+      image: pelvic/data-encoding-fpl:latest
+    inputs:
+      artifacts:
+      - {name: feature-engineering-train, path: /tmp/inputs/input-0/data}
+    outputs:
+      artifacts:
+      - {name: data-encoding-dv, path: /app/model/dv}
+      - {name: data-encoding-feature_path, path: /app/data_encoding/preprocessed_data/features.npy}
+      - {name: data-encoding-scaler, path: /app/model/min_max_scaler}
+      - {name: data-encoding-target, path: /app/target.csv}
+    metadata:
+      labels:
+        pipelines.kubeflow.org/kfp_sdk_version: 1.8.13
+        pipelines.kubeflow.org/pipeline-sdk-type: kfp
+        pipelines.kubeflow.org/enable_caching: "true"
+  - name: download-data
+    container:
+      args: []
+      command: [python, data_download.py]
+      image: pelvic/data-download-fpl:latest
+    outputs:
+      artifacts:
+      - {name: download-data-allseasons, path: /app/all_seasons_hist.csv}
+      - {name: download-data-currentseason, path: /app/currentseason.csv}
+      - {name: download-data-fixtures, path: /app/fixtures.csv}
+      - {name: download-data-hist, path: /app/hist_data.csv}
+      - {name: download-data-players, path: /app/players_df.csv}
+    metadata:
+      labels:
+        pipelines.kubeflow.org/kfp_sdk_version: 1.8.13
+        pipelines.kubeflow.org/pipeline-sdk-type: kfp
+        pipelines.kubeflow.org/enable_caching: "true"
+  - name: feature-engineering
+    container:
+      args: [--allseasons, /tmp/inputs/input-0/data, --hist, /tmp/inputs/input-1/data,
+        --players_df, /tmp/inputs/input-2/data, --currentseason, /tmp/inputs/input-3/data,
+        --fixtures_df, /tmp/inputs/input-4/data]
+      command: [python, feat_eng.py]
+      image: pelvic/feature_engineering_fpl:latest
+    inputs:
+      artifacts:
+      - {name: download-data-allseasons, path: /tmp/inputs/input-0/data}
+      - {name: download-data-hist, path: /tmp/inputs/input-1/data}
+      - {name: download-data-players, path: /tmp/inputs/input-2/data}
+      - {name: download-data-currentseason, path: /tmp/inputs/input-3/data}
+      - {name: download-data-fixtures, path: /tmp/inputs/input-4/data}
+    outputs:
+      artifacts:
+      - {name: feature-engineering-test, path: /app/df_test.csv}
+      - {name: feature-engineering-train, path: /app/all_seasons_clean_hist.csv}
+    metadata:
+      labels:
+        pipelines.kubeflow.org/kfp_sdk_version: 1.8.13
+        pipelines.kubeflow.org/pipeline-sdk-type: kfp
+        pipelines.kubeflow.org/enable_caching: "true"
+  - name: regression-ml-workflow-pipeline
+    dag:
+      tasks:
+      - name: data-encoding
+        template: data-encoding
+        dependencies: [feature-engineering]
+        arguments:
+          artifacts:
+          - {name: feature-engineering-train, from: '{{tasks.feature-engineering.outputs.artifacts.feature-engineering-train}}'}
+      - {name: download-data, template: download-data}
+      - name: feature-engineering
+        template: feature-engineering
+        dependencies: [download-data]
+        arguments:
+          artifacts:
+          - {name: download-data-allseasons, from: '{{tasks.download-data.outputs.artifacts.download-data-allseasons}}'}
+          - {name: download-data-currentseason, from: '{{tasks.download-data.outputs.artifacts.download-data-currentseason}}'}
+          - {name: download-data-fixtures, from: '{{tasks.download-data.outputs.artifacts.download-data-fixtures}}'}
+          - {name: download-data-hist, from: '{{tasks.download-data.outputs.artifacts.download-data-hist}}'}
+          - {name: download-data-players, from: '{{tasks.download-data.outputs.artifacts.download-data-players}}'}
+      - name: train-model
+        template: train-model
+        dependencies: [data-encoding, feature-engineering]
+        arguments:
+          artifacts:
+          - {name: data-encoding-dv, from: '{{tasks.data-encoding.outputs.artifacts.data-encoding-dv}}'}
+          - {name: data-encoding-feature_path, from: '{{tasks.data-encoding.outputs.artifacts.data-encoding-feature_path}}'}
+          - {name: data-encoding-scaler, from: '{{tasks.data-encoding.outputs.artifacts.data-encoding-scaler}}'}
+          - {name: data-encoding-target, from: '{{tasks.data-encoding.outputs.artifacts.data-encoding-target}}'}
+          - {name: feature-engineering-test, from: '{{tasks.feature-engineering.outputs.artifacts.feature-engineering-test}}'}
+  - name: train-model
+    container:
+      args: [--features_path, /tmp/inputs/input-0/data, --target, /tmp/inputs/input-1/data,
+        --dv_path, /tmp/inputs/input-2/data, --scaler_path, /tmp/inputs/input-3/data,
+        --test, /tmp/inputs/input-4/data]
+      command: [python, model_train.py]
+      image: pelvic/model_train-fpl:latest
+    inputs:
+      artifacts:
+      - {name: data-encoding-feature_path, path: /tmp/inputs/input-0/data}
+      - {name: data-encoding-target, path: /tmp/inputs/input-1/data}
+      - {name: data-encoding-dv, path: /tmp/inputs/input-2/data}
+      - {name: data-encoding-scaler, path: /tmp/inputs/input-3/data}
+      - {name: feature-engineering-test, path: /tmp/inputs/input-4/data}
+    metadata:
+      labels:
+        pipelines.kubeflow.org/kfp_sdk_version: 1.8.13
+        pipelines.kubeflow.org/pipeline-sdk-type: kfp
+        pipelines.kubeflow.org/enable_caching: "true"
+  arguments:
+    parameters: []
+  serviceAccountName: pipeline-runner
