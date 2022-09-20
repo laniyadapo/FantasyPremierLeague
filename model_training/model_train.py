@@ -18,7 +18,11 @@ import pickle
 
 def model_training(args):
     df_test = pd.read_csv(args.test)
-    target = pd.read_csv(args.target)
+    df_test.set_index('year', inplace=True)
+    print(df_test.head())
+    df_allseasons_final = pd.read_csv(args.target)
+    print(df_allseasons_final.head())
+    target = df_allseasons_final['total_points']
     features_norm = np.load(args.features_path, allow_pickle=True)
     df_test_dict = df_test.to_dict(orient='records')
     rf = RandomForestRegressor(random_state=2)
@@ -30,10 +34,13 @@ def model_training(args):
         scaler = pickle.load(f_in2)
 
     test_encoded = dv.transform(df_test_dict)
+    vocab = dv.vocabulary_
     test_transformed = pd.DataFrame(test_encoded, columns=dv.feature_names_)
     test_norm = scaler.transform(test_transformed)
+    print(test_norm)
     predicted = final_model.predict(test_norm)
-    df_predicted = pd.Series(predicted)
+    print(predicted[0:11])
+    # df_predicted = pd.Series(predicted)
     RSME_score = mean_squared_error(y_true=df_test['total_points'], y_pred=predicted, squared=False) #squared=False will RMSE instead of MSE
     R2_score = r2_score(df_test['total_points'], predicted)
 

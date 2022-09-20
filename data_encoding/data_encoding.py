@@ -9,11 +9,12 @@ import numpy as np
 
 def data_encoding(args):
     df_allseasons_final = pd.read_csv(args.train)
+    df_allseasons_final.set_index('year', inplace=True)
     # Sort index (just in case).
     df_allseasons_final.sort_index(inplace=True)
     # Assign features and target variable.
     features = df_allseasons_final.drop(['total_points'], axis = 1)
-    target = df_allseasons_final['total_points']
+    # target = df_allseasons_final['total_points']
 
     # Convert dataframe to a dictionary.
     features_dict = features.to_dict(orient='records')
@@ -46,7 +47,7 @@ def data_encoding(args):
     with open('./model/min_max_scaler', 'wb') as f_out3:
         pickle.dump(min_max_scaler_final, f_out3)
 
-    target.to_csv('target.csv')
+    df_allseasons_final.to_csv('target.csv')
 
         
 
